@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2 (2026-11-15)
+
+- Records reply letter: when tips for the asked months are paid later, it says under which month they will appear, and it says "No tips were paid in these months" instead of showing only zeros.
+
 ## 1.0.1 (2026-11-15)
 
 - The paste file is now plain ASCII (accents and currency signs written as escapes), so copying it from any browser view keeps £, € and accented statement text intact.

@@ -103,6 +103,11 @@ var Docs = (function () {
         : '<h2>Your request for tips records</h2><p>You asked on ' + C.d(req.on, 'long') + ' for the records of tips from ' + range + '. Here they are.</p>') +
       '<table><thead><tr><th>Month paid</th><th>Tips at ' + esc(v.venue) + '</th><th>To workers</th><th>Through tronc</th><th>Your share</th></tr></thead><tbody>' + body +
       '</tbody><tfoot><tr><td>Total</td><td>' + mo(L.sum.total) + '</td><td>' + mo(L.sum.toWorkers) + '</td><td>' + mo(L.sum.tronc) + '</td><td>' + mo(L.sum.share) + '</td></tr></tfoot></table>' +
+      (L.sum.total ? '' : '<p>No tips were paid in these months.</p>') +
+      (L.later || []).map(function (b) {
+        var span = b.from.slice(0, 7) === b.to.slice(0, 7) ? C.d(b.to, 'my') : C.d(b.from, 'long') + ' to ' + C.d(b.to, 'long');
+        return '<p>Tips for ' + span + ' are paid on ' + C.d(b.paid, 'long') + ', so they will appear under ' + C.d(b.paid, 'my') + '.</p>';
+      }).join('') +
       '<p>These are the total tips received at ' + esc(v.venue) + ' and your own share. We don\'t share other people\'s amounts.</p>' +
       '<p class="tf-sig">' + esc(v.contact) + '</p></article>';
   }

@@ -1,5 +1,6 @@
 // Core tests (spec section 9). Exports a list of [name, fn]; run.js runs them and prints one line.
 var Core = require('../src/core.js');
+var Docs = require('../src/docs.js');
 var assert = require('assert');
 var T = [];
 function t(name, fn) { T.push([name, fn]); }
@@ -111,6 +112,18 @@ t('T16 T17 T21 record rows and letter', function () {
   var L = Core.letterRows(Core.readRecord(old.concat(rows)), 'Amy', '2026-10', '2026-11');
   assert.strictEqual(L.rows[1].share, 43210); assert.strictEqual(L.rows[1].total, 123457); assert.strictEqual(L.sum.share, 43210);
   assert.deepStrictEqual(L.noShare, ['2026-10']);
+});
+t('T21b letter explains tips paid after the asked months', function () {
+  var rows = Core.recordRows(Core.split(EX), EX, '2026-11-28', '2026-11-28 10:00'), blocks = Core.readRecord(rows);
+  var L = Core.letterRows(blocks, 'Amy', '2025-11', '2026-10');
+  assert.strictEqual(L.sum.total, 0); assert.deepStrictEqual(L.later, [{ from: '2026-10-01', to: '2026-10-31', paid: '2026-11-28' }]);
+  var h = Docs.letter(L, { worker: 'Amy', on: '2026-11-15', m1: '2025-11', m2: '2026-10' }, { country: 'GB', venue: 'The Red Lion', contact: 'Sam' });
+  assert.ok(h.indexOf('No tips were paid in these months.') > -1);
+  assert.ok(h.indexOf('Tips for October 2026 are paid on 28 November 2026, so they will appear under November 2026.') > -1);
+  var L2 = Core.letterRows(blocks, 'Amy', '2026-10', '2026-11');
+  assert.deepStrictEqual(L2.later, []);
+  var h2 = Docs.letter(L2, { worker: 'Amy', on: '2026-12-02', m1: '2026-10', m2: '2026-11' }, { country: 'GB', venue: 'The Red Lion', contact: 'Sam' });
+  assert.ok(h2.indexOf('No tips were paid') < 0 && h2.indexOf('will appear under') < 0);
 });
 t('T2 T3 CSV parsing', function () {
   var p = Core.parseCsv('﻿Date;Tip amount;Staff;Reference\n03/10/2026;"1.234,56";Amy;R1\n04/10/2026;0;Ben;R2\n05/10/2026;2,50;"Doe, Jo";R3\n');

@@ -303,7 +303,10 @@ var Core = (function () {
     });
     var rows = months.map(function (m) { return byM[m]; }), sum = { total: 0, toWorkers: 0, tronc: 0, share: 0 };
     rows.forEach(function (x) { sum.total += x.total; sum.toWorkers += x.toWorkers; sum.tronc += x.tronc; sum.share += x.share; });
-    return { rows: rows, sum: sum, noShare: rows.filter(function (x) { return !x.worked; }).map(function (x) { return x.month; }) };
+    // Periods that end in the asked months but are paid after them, so the owner can say where they will show.
+    var later = blocks.filter(function (b) { var e = b.to.slice(0, 7); return !b.replaced && e >= m1 && e <= m2 && b.paid.slice(0, 7) > m2; })
+      .map(function (b) { return { from: b.from, to: b.to, paid: b.paid }; });
+    return { rows: rows, sum: sum, later: later, noShare: rows.filter(function (x) { return !x.worked; }).map(function (x) { return x.month; }) };
   }
 
   /* ---------- 6.12 CSV ---------- */
