@@ -1,0 +1,155 @@
+{
+ "bomFormat": "CycloneDX",
+ "specVersion": "1.5",
+ "serialNumber": "urn:uuid:88f6f94d-fe91-478f-84d3-817325688fdc",
+ "version": 1,
+ "metadata": {
+  "timestamp": "2026-11-15T04:09:31Z",
+  "component": {
+   "type": "application",
+   "name": "Tip Fair",
+   "version": "1.0.0",
+   "supplier": {
+    "name": "Facilo",
+    "url": [
+     "https://facilo.es"
+    ]
+   },
+   "description": "Google Sheets add-on that shares tips between staff and keeps records. No third-party code: Google Apps Script V8 runtime only; the Pro licence check calls the Freemius API from the sidebar."
+  }
+ },
+ "components": [
+  {
+   "type": "file",
+   "name": "src/Code.gs",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "07a344957841424e4ca4f1a2eadb95136699d1864eec8469eb569f68cfd11c8c"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "src/Print.html",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "8b33592f0420313e06ce43714bda4c817958cf0d6ea030d255b376f1a927091d"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "src/Sidebar.html",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "7370d37ffa425c529400963d701e24bd77b27aec8a6f7dd2436b42dbe3fc41c8"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "src/appsscript.json",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "f9777c72d13a6b2640d702e2de679ae9c704893472c230cb1c2080d5b7ee5f81"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "src/core.js",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "027204a663dcac679910f2b41fe6a9760db011c71cc3507d1b2d44629bcacc2e"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "src/docs.js",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "7f669af45794339075168c680924c23d4cdf200b6f55a8aceee5b1d30753743f"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "src/i18n.js",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "824329b6c5b3756ff41a2e06600b5eff07eba34fa7b2170e00a0e961b314b863"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "src/licence.gs",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "4b28580fe6b13cb85f619b607416ebbaebdb57d4dc4ea8934f94312edec196e6"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "src/sheets.gs",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "a5fd3f16a05de470e529092e0e4520e58f0db4fbfd0b19117c00f866bb8edd79"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "src/styles.html",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "21c698b59a32e6e275ea33635ad3a0844df9e4e5a7365863c3852c5084d41748"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "dist/appsscript.json.txt",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "f9777c72d13a6b2640d702e2de679ae9c704893472c230cb1c2080d5b7ee5f81"
+    }
+   ]
+  },
+  {
+   "type": "file",
+   "name": "dist/tip-fair.gs.txt",
+   "version": "1.0.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "2bc9c5fed0d3298c398cac59ddcaa00d1a5e13b579936efb55636eb6606dc398"
+    }
+   ]
+  }
+ ]
+}

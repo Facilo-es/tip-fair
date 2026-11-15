@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html><head><base target="_top"><?!= include('styles') ?></head>
+<body>
+<div id="app" class="tf-side"></div>
+<?!= include('core') ?>
+<script>
+/*
+ * Tip Fair sidebar (design A, Ledger). It shows screens and calls the server; the maths lives in core.js
+ * and runs on the server. Every value from the sheet goes through esc() before it reaches innerHTML.
+ */
+(function () {
+  var C = Core, app = document.getElementById('app');
+  var COUNTRIES = { GB: 'Great Britain', NI: 'Northern Ireland', IE: 'Ireland' };
+  var METHODS = C.METHODS;
+  var PRO_URL = 'https://tipfair.facilo.es/pro/';
+  var ICON = {
+    ok: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="currentColor"/><path d="M4.5 8.2l2.3 2.3 4.7-4.9" stroke="#fff" stroke-width="1.8" fill="none"/></svg>',
+    warn: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1l7.5 13.5H.5z" fill="#f9ab00"/><path d="M8 6v4M8 11.6v.8" stroke="#202124" stroke-width="1.6"/></svg>',
+    back: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M11 3L5 9l6 6" stroke="currentColor" stroke-width="2" fill="none"/></svg>',
+    lock: '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="5" width="8" height="6" rx="1.5" fill="currentColor"/><path d="M4 5V3.6a2 2 0 014 0V5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>'
+  };
+
+  // S: what the server last said (getState). st: this sidebar's own state.
+  var S = null, st = { screen: 'loading', msg: null, busy: false };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function cur() { return S && S.settings && S.settings.country === 'IE' ? '€' : '£'; }
+  function m(p) { return esc(C.money(p, cur())); }
+  function nb(s) { return '<span class="tf-nb">' + esc(s) + '</span>'; }
+  function month() { return C.d(st.w.from, 'm'); }
+  function per() { return st.w.from.slice(0, 7) === st.w.to.slice(0, 7) && st.w.from.slice(8) === '01' && st.w.to === C.monthEnd(st.w.from) ? C.d(st.w.from, 'mY') : C.d(st.w.from, 'dm') + ' to ' + C.d(st.w.to, 'dm'); }
+  function pro() { return S.licence.pro ? '' : ' <span class="tf-pro">' + ICON.lock + 'Pro</span>'; }
+
+  function head(title, back) {
+    return '<div class="tf-sh">' + (back ? '<button class="tf-back" data-go="home" aria-label="Back">' + ICON.back + '</button>' : '') +
+      '<span class="tf-sht">' + esc(title || 'Tip Fair') + '</span></div>';
+  }
+  function line(kind, text) { return '<p class="tf-line tf-' + kind + '">' + ICON[kind] + '<span>' + esc(text) + '</span></p>'; }
+  function btn(label, go, extra) { return '<button class="tf-btn' + (extra && extra.sec ? ' tf-sec' : '') + '" data-go="' + go + '"' + (extra && extra.off || st.busy ? ' disabled' : '') + '>' + label + '</button>'; }
+  function sel(k, opts, val, vals) {
+    return '<select class="tf-in" data-k="' + k + '">' + opts.map(function (o, i) {
+      var v = vals ? vals[i] : o;
+      return '<option value="' + esc(v) + '"' + (v === val ? ' selected' : '') + '>' + esc(o) + '</option>';
+    }).join('') + '</select>';
+  }
+  function msgs() { return st.msg ? line(st.msg.kind, st.msg.text) : ''; }
+
+  var SCREENS = {
+    loading: function () { return '<div class="tf-sb"><p class="tf-small">Loading…</p></div>'; },
+    first: function () {
+      var c = st.country || '';
+      var b = '<p class="tf-t">Tip Fair</p><p>Share tips fairly, to the penny, and keep the records your staff can ask for.</p>' +
+        '<fieldset class="tf-radios"><legend>Where is your venue?</legend>' + ['GB', 'NI', 'IE'].map(function (k) {
+          return '<label><input type="radio" name="c" data-k="country" value="' + k + '"' + (c === k ? ' checked' : '') + '> ' +
+            (k === 'GB' ? 'Great Britain (England, Scotland, Wales)' : COUNTRIES[k]) + '</label>'; }).join('') + '</fieldset>' +
+        (c === 'NI' ? '<p class="tf-note">The UK tips law doesn\'t cover Northern Ireland, so Tip Fair works as a plain tip splitter here.</p>' : '') +
+        '<label class="tf-field">Venue name<input class="tf-in" data-k="venue" maxlength="120" value="' + esc(st.venue || '') + '"></label>' +
+        msgs() + btn('Create my sheets', 'create', { off: !c }) +
+        '<p class="tf-small">Tip Fair adds four sheets to this spreadsheet: Staff, Tips, Hours and Record. Your data stays in this spreadsheet.</p>';
+      return '<div class="tf-sb">' + b + '</div>';
+    },
+    home: function () {
+      var rows = [
+        ['1', 'Staff', S.staff.length + (S.staff.length === 1 ? ' person' : ' people'), 'Edit', 'tab:Staff'],
+        ['2', 'Tips', C.money(S.tips.total, cur()) + ' in ' + month(), 'Import', 'import'],
+        ['3', 'Hours', C.hundredths(S.hours.total) + ' hours in ' + month(), 'Paste', 'hours'],
+        ['4', 'Split', S.finalised ? 'Finalised' : 'Not finalised', '', '']
+      ];
+      var links = ['<button class="tf-link" data-go="records">Records</button>', '<button class="tf-link" data-go="statements">Statements</button>'];
+      if (S.settings.country === 'GB') links.push('<button class="tf-link" data-go="policy">Policy</button>');
+      if (S.settings.country === 'IE') links.push('<button class="tf-link" data-go="notice">Notice</button>');
+      links.push('<button class="tf-link" data-go="settings">Settings</button>');
+      var b = '<ol class="tf-steps">' + rows.map(function (r) {
+        return '<li class="' + (r[0] === '4' && S.finalised ? 'ok' : '') + '"><b>' + r[0] + '</b><span class="tf-sn">' + r[1] + '</span><span class="tf-sv">' + esc(r[2]) + '</span>' +
+          (r[3] ? '<button class="tf-link" data-go="' + r[4] + '">' + r[3] + '</button>' : '<span></span>') + '</li>'; }).join('') + '</ol>';
+      if (S.badPoints.length) b += line('warn', 'Points must be a number for ' + S.badPoints.join(', ') + '. Tip Fair uses 100 until you fix it.');
+      if (S.tips.bad) b += line('warn', S.tips.bad + ' rows in the Tips sheet have no date or amount Tip Fair can read. They are left out.');
+      if (S.finalised && S.finalised.changed) b += line('warn', per() + ' changed after it was finalised. Finalise it again to update the Record.');
+      b += msgs() + btn('Split ' + esc(per()), 'split') + '<p class="tf-links">' + links.join(' · ') + '</p>';
+      return head(S.settings.venue + ' · ' + COUNTRIES[S.settings.country]) + '<div class="tf-sb">' + b + '</div>';
+    },
+    import: function () {
+      var b = '<p class="tf-t">Import tips</p><p>Export your tips from your till as a CSV file, then choose it here.</p>' +
+        '<label class="tf-btn tf-sec tf-file">Choose CSV file<input type="file" accept=".csv,.txt,text/csv" data-k="csv" hidden></label>' +
+        '<p class="tf-small">Cash tips? Add one row in the Tips sheet with the date, the amount and the type Cash.</p>';
+      var f = st.csv;
+      if (f && f.res) {
+        var r = f.res;
+        if (f.askOrder) {
+          b += '<div class="tf-box"><p>Is <b>' + esc(f.sample) + '</b> ' + esc(f.dmy) + ' or ' + esc(f.mdy) + '?</p>' +
+            '<div class="tf-pair">' + btn(esc(f.dmy), 'order:dmy', { sec: 1 }) + btn(esc(f.mdy), 'order:mdy', { sec: 1 }) + '</div></div>';
+        } else if (!r.count) {
+          b += line('warn', 'We found no tips in this file. Match the columns yourself, or export it again with tips.');
+        } else {
+          b += '<div class="tf-box"><p>We found <b>' + r.count + '</b> tips from <b>' + esc(C.d(r.first)) + '</b> to <b>' + esc(C.d(r.last)) + '</b>, <b>' + m(r.total) + '</b> in total.</p>' +
+            '<p class="tf-small">Source: ' + esc(f.source || 'My till') + (r.bad ? '. ' + r.bad + ' rows had a tip but no date we could read.' : '') + '</p></div>';
+          b += st.imported ? line('ok', st.imported) : btn('Add to Tips sheet', 'addtips');
+        }
+        b += '<button class="tf-link" data-go="mapping">Not right? Match the columns yourself.</button>';
+      }
+      return head('Home', 1) + '<div class="tf-sb">' + b + msgs() + '</div>';
+    },
+    mapping: function () {
+      var f = st.csv, cols = ['(none)'].concat(f.p.headers), vals = ['-1'].concat(f.p.headers.map(function (x, i) { return String(i); }));
+      var b = '<p class="tf-t">Which column is which?</p>' +
+        [['Date', 'date'], ['Tip amount', 'tip'], ['Staff name', 'staff'], ['Reference', 'ref']].map(function (x, i) {
+          return '<label class="tf-row">' + x[0] + (i > 1 ? ' <span class="tf-small">optional</span>' : '') + sel('map.' + x[1], cols, String(f.map[x[1]]), vals) + '</label>'; }).join('') +
+        '<label class="tf-field">Name this source<input class="tf-in" data-k="source" maxlength="60" value="' + esc(f.source || 'My till') + '"></label><p class="tf-small">We\'ll remember this for next time.</p>' +
+        btn('Show what we found', 'remap');
+      return head('Home', 1) + '<div class="tf-sb">' + b + msgs() + '</div>';
+    },
+    hours: function () {
+      var b = '<p class="tf-t">Hours</p><p>Paste hours into the Hours sheet: one row per person, or one row per person per day if you share tips day by day.</p><p class="tf-small">Names must match the Staff sheet.</p>' +
+        '<p class="tf-links"><button class="tf-link" data-go="tab:Hours">Open the Hours sheet</button></p>' + btn('Check hours', 'checkhours');
+      var h = st.hours;
+      if (h) {
+        if (!h.messages.some(function (x) { return x.k === 'unknown'; })) b += line('ok', C.hundredths(h.total) + ' hours for ' + h.people + ' people. All names match.');
+        h.messages.forEach(function (x) { b += line('warn', x.text); });
+        if (h.bad) b += line('warn', h.bad + ' rows in the Hours sheet have hours or a date Tip Fair can\'t read. They are left out.');
+      }
+      return head('Home', 1) + '<div class="tf-sb">' + b + msgs() + '</div>';
+    },
+    split: function () {
+      var w = st.w, total = w.groups.reduce(function (a, g) { return a + (Number(g.pct) || 0); }, 0);
+      total = Math.round(total * 100) / 100;
+      var b = '<p class="tf-t">Split ' + esc(per()) + '</p>' +
+        '<div class="tf-kv"><span>Period</span><span><input class="tf-in tf-date" type="date" data-k="w.from" value="' + w.from + '"> to <input class="tf-in tf-date" type="date" data-k="w.to" value="' + w.to + '"></span>' +
+        '<span>Payout</span><span><input class="tf-in tf-date" type="date" data-k="w.payout" value="' + w.payout + '"></span></div>' +
+        '<p class="tf-lbl">Share between groups</p><label class="tf-chk"><input type="checkbox" data-k="w.groupsOn"' + (w.groupsOn ? ' checked' : '') + '> Use a fixed share per group</label>';
+      if (w.groupsOn) {
+        b += '<div class="tf-groups">' + w.groups.map(function (g, i) {
+          return '<span class="tf-gn">' + esc(g.name) + '</span><span class="tf-pct"><input class="tf-in tf-num" type="number" min="0" max="100" step="any" data-g="' + i + '" data-f="pct" value="' + esc(g.pct) + '"> %</span>' +
+            '<span class="tf-by">by</span><select class="tf-in" data-g="' + i + '" data-f="method">' + METHODS.map(function (x) { return '<option' + (x === g.method ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>';
+        }).join('') + '<span class="tf-gn">Total</span><span class="tf-pct' + (total === 100 ? '' : ' tf-bad') + '">' + total + ' %</span></div>';
+      } else {
+        b += '<label class="tf-row">Share by' + sel('w.method', METHODS, w.method) + '</label>';
+      }
+      b += '<p class="tf-small">Points let you weigh roles, seniority or length of service. Set them on the Staff sheet.</p>' +
+        '<div class="tf-kv"><span>Pool</span><span class="tf-radio2"><label><input type="radio" name="pool" data-k="w.pool" value="period"' + (w.pool !== 'day' ? ' checked' : '') + '> Whole period</label><label><input type="radio" name="pool" data-k="w.pool" value="day"' + (w.pool === 'day' ? ' checked' : '') + '> Each day</label></span>' +
+        '<span>Tronc</span><span>Paid through a tronc operator <input class="tf-in tf-money" data-k="w.tronc" value="' + m(w.tronc) + '"></span></div>' +
+        msgs() + btn('Work out shares', 'work', { off: w.groupsOn && total !== 100 });
+      return head('Home', 1) + '<div class="tf-sb">' + b + '</div>';
+    },
+    results: function () {
+      var r = st.r;
+      if (!r.ok) return head('Home', 1) + '<div class="tf-sb">' + line('warn', r.error) + btn('Back to Split', 'split') + '</div>';
+      var b = '<p class="tf-t">' + esc(per()) + ': ' + m(r.Tsplit) + ' to share</p>' + table(r);
+      r.checks.forEach(function (c) { b += line(c.kind, c.text); });
+      if (r.saved) b += line('ok', r.saved);
+      if (!r.locked) {
+        b += btn((r.saved ? 'Finalise again' : 'Finalise ' + esc(month())), 'finalise');
+        if (r.saved) b += '<label class="tf-field">Note for the Record <span class="tf-small">why you finalised again</span><input class="tf-in" data-k="note" maxlength="200" value="' + esc(st.note || '') + '"></label>';
+        b += '<p class="tf-links"><button class="tf-link" data-go="write">Write shares to sheet</button> · <button class="tf-link" data-go="statements">Print one statement</button></p>';
+      } else b += upgradeCard();
+      return head('Home', 1) + '<div class="tf-sb">' + msgs() + b + '</div>';
+    },
+    statements: function () {
+      var names = [];
+      if (st.r && st.r.ok) st.r.groups.forEach(function (g) { g.people.forEach(function (p) { if (p.share > 0) names.push(p.name); }); });
+      var b = '<p class="tf-t">Statements · ' + esc(per()) + '</p>';
+      if (!st.r || !st.r.ok) b += '<p>Work out the shares first, then print statements here.</p>' + btn('Work out shares', 'work');
+      else if (st.r.locked) b += line('warn', st.r.sharers + ' people share in this period. Free covers up to 5.') + upgradeCard();
+      else {
+        if (st.pick == null || names.indexOf(st.pick) < 0) st.pick = names[0];
+        b += btn('Print all statements' + pro(), 'printall') +
+          '<p class="tf-lbl">Or print one</p><div class="tf-pair">' + sel('pick', names, st.pick) + btn('Print', 'printone', { sec: 1 }) + '</div>' +
+          '<p class="tf-small">Each statement shows the venue\'s total and that person\'s own share. It never shows anyone else\'s share.</p>';
+      }
+      return head('Home', 1) + '<div class="tf-sb">' + msgs() + b + '</div>';
+    },
+    records: function () {
+      var R = st.rec, q = st.req, ni = S.settings.country === 'NI';
+      if (!R) return head('Home', 1) + '<div class="tf-sb"><p class="tf-small">Loading…</p></div>';
+      var live = R.blocks.filter(function (x) { return !x.replaced; }), changed = live.filter(function (x) { return x.changed; })[0];
+      var b = '<p class="tf-t">Records</p>';
+      if (!live.length) b += '<p>No periods finalised yet. Finalise a split and it is saved in the Record sheet.</p>';
+      else {
+        b += '<p>' + live.length + (live.length === 1 ? ' period' : ' periods') + ' finalised, the first in ' + esc(C.d(live[live.length - 1].from, 'mY')) + '.</p>';
+        b += changed ? line('warn', C.d(changed.from, 'my') + ' changed after it was finalised on ' + C.d(changed.at.slice(0, 10)) + '. Check the Record sheet, or finalise it again with a note.')
+          : line('ok', 'No changes since they were finalised.');
+      }
+      var months = [], end = C.addMonths(S.today.slice(0, 7), 0);
+      for (var x = C.addMonths(end, -48); x <= end; x = C.addMonths(x, 1)) months.push(x);
+      b += '<p class="tf-lbl">' + (ni ? 'Tips summary' : 'A worker asked for their records?') + '</p>' +
+        '<label class="tf-row">Worker' + sel('req.worker', R.names.length ? R.names : ['No one yet'], q.worker) + '</label>' +
+        '<label class="tf-row">Asked on<input class="tf-in tf-date" type="date" data-k="req.on" value="' + q.on + '"></label>' +
+        '<div class="tf-row">From<span>' + sel('req.m1', months.map(function (x) { return C.d(x + '-01', 'mY'); }), q.m1, months) + '</span></div>' +
+        '<div class="tf-row">To<span>' + sel('req.m2', months.map(function (x) { return C.d(x + '-01', 'mY'); }), q.m2, months) + '</span></div>';
+      var rr = C.requestRange(q.on, q.m1, q.m2);
+      rr.errors.forEach(function (e) { b += line('warn', e.text); });
+      b += btn('Make reply letter' + pro(), 'letter', { off: rr.errors.length || !R.names.length }) +
+        (ni ? '' : '<p class="tf-small">Reply by ' + esc(C.d(rr.replyBy, 'long')) + '</p>') +
+        '<p class="tf-links"><button class="tf-link" data-go="tab:Record">Open the Record sheet</button></p>';
+      return head('Home', 1) + '<div class="tf-sb">' + msgs() + b + '</div>';
+    },
+    policy: function () {
+      var a = st.pol;
+      function radio(k, v, label) { return '<label><input type="radio" name="' + k + '" data-k="pol.' + k + '" value="' + v + '"' + (a[k] === v ? ' checked' : '') + '> ' + label + '</label>'; }
+      var b = '<p class="tf-t">Your tipping policy</p><p class="tf-small">Staff must be able to see your written policy. Answer a few questions and Tip Fair writes it in plain words. Check it fits your venue before you share it.</p>' +
+        '<fieldset class="tf-radios"><legend>Do you ask customers to tip?</legend>' + radio('ask', 'no', 'No, tips are up to them') + radio('ask', 'encourage', 'We encourage tips') + radio('ask', 'service', 'We add a service charge') + '</fieldset>' +
+        '<fieldset class="tf-radios tf-inline"><legend>How do customers tip?</legend>' + ['Card', 'Cash', 'Service charge', 'Vouchers'].map(function (x) {
+          return '<label><input type="checkbox" data-k="pol.way" value="' + x + '"' + (a.ways.indexOf(x) > -1 ? ' checked' : '') + '> ' + x + '</label>'; }).join('') + '</fieldset>' +
+        '<label class="tf-field">Who shares the tips?' + sel('pol.who', WHO, a.who) + '</label>' +
+        '<label class="tf-field">When are tips paid?' + sel('pol.when', WHEN, a.when) + '</label>' +
+        '<div class="tf-field">Did you ask staff for their views?<span class="tf-pair"><input class="tf-in tf-date" type="date" data-k="pol.consultOn" value="' + esc(a.consultOn) + '">' + sel('pol.consultHow', ['Meeting', 'Survey', 'One to one'], a.consultHow) + '</span></div>' +
+        '<label class="tf-field">What staff said, without names<textarea class="tf-in" rows="2" maxlength="600" data-k="pol.said">' + esc(a.said) + '</textarea></label>' +
+        '<p class="tf-small">Write a short, anonymous summary. Staff should be able to see it.</p>' +
+        '<label class="tf-field">Who to ask about tips<input class="tf-in" data-k="pol.contact" maxlength="120" value="' + esc(a.contact) + '"></label>' +
+        msgs() + btn('Write my policy' + pro(), 'printpolicy');
+      return head('Home', 1) + '<div class="tf-sb">' + b + '</div>';
+    },
+    notice: function () {
+      var a = st.not;
+      var b = '<p class="tf-t">Tips and gratuities notice</p><p class="tf-small">In Ireland you must show customers how you handle tips: at your premises, where customers pay, and on your website or app.</p>' +
+        '<fieldset class="tf-radios"><legend>Do you share card tips with staff?</legend><label><input type="radio" name="n1" data-k="not.card" value="1"' + (a.card ? ' checked' : '') + '> Yes</label><label><input type="radio" name="n1" data-k="not.card" value=""' + (a.card ? '' : ' checked') + '> No tips taken by card</label></fieldset>' +
+        '<label class="tf-field">How?' + sel('not.how', HOW, a.how) + '</label>' +
+        '<label class="tf-field">How much goes to staff?<input class="tf-in" data-k="not.pct" maxlength="20" value="' + esc(a.pct) + '"></label>' +
+        '<fieldset class="tf-radios"><legend>Service charge?</legend><label><input type="radio" name="n2" data-k="not.service" value=""' + (a.service ? '' : ' checked') + '> None</label><label><input type="radio" name="n2" data-k="not.service" value="1"' + (a.service ? ' checked' : '') + '> Yes, it is shared like card tips</label></fieldset>' +
+        '<label class="tf-field">Cash tips' + sel('not.cash', ['Shared the same way', 'Kept by the person who receives them'], a.cash) + '</label>' +
+        msgs() + btn('Make notice' + pro(), 'printnotice') +
+        (S.licence.pro ? '<p class="tf-links"><button class="tf-link" data-go="noticetext">Copy the text for your website</button></p>' : '') +
+        (st.noticeText ? '<textarea class="tf-in" rows="8" readonly>' + esc(st.noticeText) + '</textarea>' : '');
+      return head('Home', 1) + '<div class="tf-sb">' + b + '</div>';
+    },
+    upgrade: function () { return head('Home', 1) + '<div class="tf-sb">' + upgradeCard() + '</div>'; },
+    settings: function () {
+      var L = S.licence;
+      var b = '<p class="tf-t">Settings</p><label class="tf-row">Venue name<input class="tf-in" data-k="set.venue" maxlength="120" value="' + esc(st.set.venue) + '"></label>' +
+        '<label class="tf-row">Country' + sel('set.country', ['GB', 'NI', 'IE'].map(function (k) { return COUNTRIES[k]; }), st.set.country, ['GB', 'NI', 'IE']) + '</label>' +
+        '<label class="tf-row">Who staff ask about tips<input class="tf-in" data-k="set.contact" maxlength="120" value="' + esc(st.set.contact) + '"></label>' +
+        btn('Save', 'savesettings', { sec: 1 }) +
+        '<div class="tf-row">Licence key<span class="tf-pair"><input class="tf-in" data-k="key" placeholder="' + (L.hasKey ? 'sk_••••••••' + esc(L.keyEnd) : 'sk_…') + '" autocomplete="off">' + btn('Activate', 'activate', { sec: 1 }) + '</span></div>';
+      if (L.pro) b += line('ok', 'Pro active' + (L.expires && L.expires < '2999' ? ' until ' + C.d(L.expires) : '') + '.' + (L.left != null && L.left < C.GRACE_DAYS ? ' We couldn\'t check your key lately. Pro stays on for ' + L.left + ' more days.' : ''));
+      else if (L.status === 'expired' || L.status === 'cancelled') b += line('warn', 'Your Pro licence has ended. Renew it to print every statement at once and use more than 5 people.');
+      b += msgs() + '<p class="tf-small">Support: support@facilo.es · tipfair.facilo.es</p>';
+      return head('Home', 1) + '<div class="tf-sb">' + b + '</div>';
+    }
+  };
+  var WHO = ['All staff in the groups on the Split page', 'All staff who work the shift', 'Front of house staff only'];
+  var WHEN = ['With the monthly pay, at the end of the next month', 'With the weekly pay, the week after', 'With the pay for the period they were earned in'];
+  var HOW = ['By hours worked, between all staff on shift', 'Equally, between all staff on shift', 'By points for each role, between all staff on shift'];
+
+  function table(r) {
+    var h = '<table class="a-tab"><thead><tr><th>Name</th><th>Hours</th><th>Pts</th><th>Share</th></tr></thead><tbody>';
+    r.groups.forEach(function (g) {
+      if (st.w.groupsOn) h += '<tr class="a-g"><td colspan="3">' + esc(g.name) + ' <small>' + esc(g.pct) + '% by ' + esc(g.method.toLowerCase()) + '</small></td><td class="tf-r">' + m(g.pot) + '</td></tr>';
+      if (r.locked) h += '<tr class="a-lock"><td colspan="3">' + g.n + (g.n === 1 ? ' person' : ' people') + '</td><td class="a-s">•••</td></tr>';
+      g.people.forEach(function (p) {
+        h += '<tr class="' + (p.share > 0 ? '' : 'a-z') + '"><td>' + esc(p.name) + '</td><td>' + esc(C.hundredths(p.h)) + '</td><td>' + esc(C.hundredths(p.p)) + '</td><td class="a-s">' + m(p.share) + '</td></tr>';
+      });
+    });
+    return h + '</tbody><tfoot><tr><td colspan="3">Total</td><td>' + m(r.Tsplit) + '</td></tr></tfoot></table>';
+  }
+  function upgradeCard() {
+    return '<div class="tf-up"><p class="tf-upt">Tip Fair Pro</p><p>For venues with more than 5 people sharing tips.</p><ul>' +
+      ['Unlimited staff', 'Print every statement at once, in 6 languages', 'Reply to record requests in a minute', 'Write your tipping policy, or your Irish tips notice']
+        .map(function (x) { return '<li>' + ICON.ok + '<span>' + x + '</span></li>'; }).join('') + '</ul>' +
+      '<p class="tf-price">' + (S.settings.country === 'IE' ? '€7 a month or €69 a year per venue.' : '£6 a month or £59 a year per venue.') + ' Cancel anytime.</p>' +
+      '<button class="tf-btn tf-gold" data-go="buy">Get Pro</button><p class="tf-small">Already have a key? <button class="tf-link" data-go="settings">Enter it in Settings.</button></p></div>';
+  }
+
+  function draw() {
+    app.innerHTML = SCREENS[st.screen]();
+    app.querySelectorAll('button[data-go]').forEach(function (b) { if (st.busy) b.disabled = true; });
+  }
+  function go(screen) { st.msg = null; st.screen = screen; draw(); app.scrollTop = 0; }
+
+  /** Server calls. A failure shows the error in the sidebar and never leaves a screen stuck. */
+  function call(fn, args, ok) {
+    st.busy = true; draw();
+    var run = google.script.run.withSuccessHandler(function (x) { st.busy = false; ok(x); draw(); }).withFailureHandler(function (e) {
+      st.busy = false;
+      st.msg = { kind: 'warn', text: (e && e.message) || 'Something went wrong. Try again.' };
+      draw();
+    });
+    run[fn].apply(run, args || []);
+  }
+  function load(state) {
+    S = state;
+    if (!S.setUp) { st.screen = 'first'; return; }
+    st.w = JSON.parse(JSON.stringify(S.work));
+    st.set = { venue: S.settings.venue, country: S.settings.country, contact: S.settings.contact };
+    if (st.screen === 'loading' || st.screen === 'first') st.screen = 'home';
+  }
+  function proOr(res, then) {
+    if (res && res.code === 'PRO') return go('upgrade');
+    if (res && res.ok === false) { st.msg = { kind: 'warn', text: res.error }; return; }
+    if (then) then(res);
+  }
+
+  /* ---------- CSV import (6.12): parsed here, only the tips go to the server ---------- */
+  function readCsv(file) {
+    st.msg = null; st.imported = null;
+    if (file.size > 5 * 1024 * 1024) { st.msg = { kind: 'warn', text: 'That file is over 5 MB. Export a shorter period.' }; return draw(); }
+    var fr = new FileReader();
+    fr.onload = function () {
+      var p = C.parseCsv(String(fr.result));
+      if (!p.ok) { st.msg = { kind: 'warn', text: p.error }; st.csv = null; return draw(); }
+      var key = C.mappingKey(p.headers), auto = C.detectColumns(p.headers);
+      st.csv = { p: p, key: key, map: auto, source: C.tillName(p.headers), order: '' };
+      call('getMapping', [key], function (saved) {
+        if (saved) { st.csv.map = saved.map; st.csv.source = saved.source; st.csv.order = saved.order || ''; }
+        if (!st.csv.map.found && !saved) { st.screen = 'mapping'; return; }
+        scan();
+      });
+    };
+    fr.readAsText(file);
+  }
+  function scan() {
+    var f = st.csv, r = C.csvTips(f.p, f.map, f.source || 'My till', f.order || '');
+    f.res = r; f.askOrder = false;
+    if (r.ambiguous) {
+      var s = '';
+      f.p.rows.some(function (row) { var v = String(row[f.map.date] || '').trim().replace(/[T ]\d.*$/, ''); var x = /^(\d{1,2})[\/.\-](\d{1,2})/.exec(v); if (x && x[1] !== x[2]) { s = v; return true; } return false; });
+      var a = C.parseDate(s, 'dmy'), b = C.parseDate(s, 'mdy');
+      f.askOrder = true; f.sample = s; f.dmy = a ? C.d(a, 'dM') : 'day first'; f.mdy = b ? C.d(b, 'dM') : 'month first';
+    }
+    st.screen = 'import';
+  }
+
+  /* ---------- clicks ---------- */
+  var ACT = {
+    create: function () { call('setup', [st.country, st.venue || ''], load); },
+    home: function () { call('getState', [], function (s) { load(s); go('home'); }); },
+    import: function () { st.csv = null; st.imported = null; go('import'); },
+    mapping: function () { go('mapping'); },
+    remap: function () {
+      var mp = st.csv.map;
+      if (mp.date < 0 || mp.tip < 0) { st.msg = { kind: 'warn', text: 'Choose the date and tip amount columns.' }; return draw(); }
+      st.csv.order = ''; scan(); draw();
+    },
+    order: function (o) { st.csv.order = o; scan(); draw(); },
+    addtips: function () {
+      var f = st.csv;
+      call('importTips', [f.res.tips, { key: f.key, map: f.map, source: f.source || 'My till', order: f.order }], function (res) {
+        st.imported = res.added + (res.added === 1 ? ' tip' : ' tips') + ' added to the Tips sheet.' + (res.skipped ? ' ' + res.skipped + ' tips were already in the sheet and were skipped.' : '');
+        call('getState', [], load);
+      });
+    },
+    hours: function () { st.hours = null; go('hours'); },
+    checkhours: function () { call('checkHours', [st.w.from, st.w.to], function (h) { st.hours = h; }); },
+    split: function () { go('split'); },
+    work: function () {
+      call('work', [st.w], function (r) { st.r = r; st.note = ''; st.screen = 'results'; st.msg = null; });
+    },
+    finalise: function () {
+      call('finalise', [st.w, st.note || ''], function (res) {
+        proOr(res, function () { call('work', [st.w], function (r) { st.r = r; st.msg = null; call('getState', [], load); }); });
+      });
+    },
+    write: function () { call('writeShares', [st.w], function (res) { proOr(res, function () { st.msg = { kind: 'ok', text: 'Shares written to the Shares sheet.' }; }); }); },
+    statements: function () {
+      st.msg = null;
+      if (st.r && st.r.ok) return go('statements');
+      call('work', [st.w], function (r) { st.r = r; st.screen = 'statements'; });
+    },
+    printone: function () { call('print', ['one', { w: st.w, name: st.pick }], function (res) { proOr(res); }); },
+    printall: function () { call('print', ['all', { w: st.w }], function (res) { proOr(res); }); },
+    records: function () {
+      var t = S.today, last = C.addMonths(t.slice(0, 7), -1);
+      st.req = st.req || { worker: '', on: t, m1: C.addMonths(last, -11), m2: last };
+      st.rec = null; go('records');
+      call('getRecords', [], function (R) { st.rec = R; if (R.names.indexOf(st.req.worker) < 0) st.req.worker = R.names[0] || ''; });
+    },
+    letter: function () { call('print', ['letter', { worker: st.req.worker, on: st.req.on, m1: st.req.m1, m2: st.req.m2 }], function (res) { proOr(res); }); },
+    policy: function () {
+      st.pol = st.pol || { ask: 'no', ways: ['Card', 'Cash'], who: WHO[0], when: WHEN[0], consultOn: S.today, consultHow: 'Meeting', said: '', contact: S.settings.contact || '' };
+      go('policy');
+    },
+    printpolicy: function () {
+      var a = st.pol;
+      if (!a.contact.trim()) { st.msg = { kind: 'warn', text: 'Add who staff can ask about tips.' }; return draw(); }
+      call('print', ['policy', { w: st.w, a: { ask: a.ask, ways: a.ways, who: a.who, when: a.when, consultOn: a.consultOn, consultHow: a.consultHow, said: a.said, contact: a.contact, tronc: st.w.tronc > 0 } }], function (res) { proOr(res); });
+    },
+    notice: function () { st.not = st.not || { card: true, how: HOW[0], pct: '100%', service: false, cash: 'Shared the same way' }; st.noticeText = null; go('notice'); },
+    printnotice: function () { call('print', ['notice', { a: st.not }], function (res) { proOr(res); }); },
+    noticetext: function () { call('noticeText', [st.not], function (res) { proOr(res, function (x) { st.noticeText = x.text; }); }); },
+    upgrade: function () { go('upgrade'); },
+    buy: function () { window.open(PRO_URL + '?c=' + (S.settings.country === 'IE' ? 'ie' : 'uk'), '_blank'); },
+    settings: function () { st.key = ''; go('settings'); },
+    savesettings: function () { call('saveSettings', [st.set], function (s) { load(s); st.msg = { kind: 'ok', text: 'Saved.' }; }); },
+    activate: function () {
+      var key = String(st.key || '').trim();
+      if (!/^sk_/.test(key)) { st.msg = { kind: 'warn', text: 'Paste the licence key from your email. It starts with sk_.' }; return draw(); }
+      st.busy = true; draw();
+      Licence.activate(key, function (status) {
+        st.busy = false;
+        call('getState', [], function (s) {
+          load(s);
+          st.msg = status === 'ok' ? { kind: 'ok', text: 'Pro is on. Thank you.' } : { kind: 'warn', text: {
+            used: 'This key is already used in another spreadsheet. Each venue needs its own key.',
+            wrong: 'That key didn\'t work. Check it against your email and try again.',
+            expired: 'That licence has ended. Renew it, then try again.',
+            offline: 'We couldn\'t reach the licence server. Check your connection and try again.',
+            entity: 'Pro isn\'t available yet. Try again later.' }[status] || 'That key didn\'t work.' };
+          if (status === 'ok') st.key = '';
+        });
+      });
+    }
+  };
+
+  app.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-go]');
+    if (!b || b.disabled) return;
+    var g = b.getAttribute('data-go'), i = g.indexOf(':');
+    if (g.slice(0, 4) === 'tab:') return google.script.run.openSheet(g.slice(4));
+    if (i > -1) return ACT[g.slice(0, i)](g.slice(i + 1));
+    st.msg = null;
+    ACT[g]();
+  });
+  function set(path, v) {
+    var k = path.split('.');
+    if (k.length === 1) { st[k[0]] = v; return; }
+    var o = st[k[0]];
+    if (k[0] === 'csv' || k[0] === 'map') o = st.csv.map;
+    o[k[1]] = v;
+  }
+  app.addEventListener('change', function (e) {
+    var t = e.target, k = t.getAttribute('data-k'), g = t.getAttribute('data-g');
+    if (g != null) { var f = t.getAttribute('data-f'); st.w.groups[+g][f] = f === 'pct' ? (t.value === '' ? 0 : Number(t.value)) : t.value; return draw(); }
+    if (!k) return;
+    if (k === 'csv') { if (t.files[0]) readCsv(t.files[0]); return; }
+    if (k === 'pol.way') { var ws = st.pol.ways.filter(function (x) { return x !== t.value; }); if (t.checked) ws.push(t.value); st.pol.ways = ws; return; }
+    if (k === 'w.groupsOn') { st.w.groupsOn = t.checked; return draw(); }
+    if (k === 'w.tronc') { var p = C.parseAmount(t.value, false); st.w.tronc = p == null || p < 0 ? 0 : p; return draw(); }
+    if (k.slice(0, 4) === 'map.') { st.csv.map[k.slice(4)] = Number(t.value); return; }
+    if (k === 'source') { st.csv.source = t.value; return; }
+    if (k === 'not.card' || k === 'not.service') { st.not[k.slice(4)] = !!t.value; return; }
+    set(k, t.value);
+    if (k === 'country' || k.slice(0, 4) === 'req.') draw();
+  });
+  app.addEventListener('input', function (e) {
+    var k = e.target.getAttribute('data-k');
+    if (k === 'venue' || k === 'note' || k === 'key' || k === 'pol.said' || k === 'pol.contact' || k === 'set.venue' || k === 'set.contact' || k === 'not.pct') set(k, e.target.value);
+  });
+
+  /* ---------- Licence (6.11), as in Remesa Fácil ---------- */
+  var Licence = {
+    /** Talks to Freemius from the sidebar. Only uid, key and title leave the sheet. */
+    request: function (method, url, body, done) {
+      if (window.TF_FETCH) return window.TF_FETCH(method, url, body, done); // local preview only
+      var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opt.body = JSON.stringify(body);
+      fetch(url, opt).then(function (res) {
+        return res.json().then(function (j) { done(null, res.status, j); }, function () { done(null, res.status, {}); });
+      }, function () { done('offline'); });
+    },
+    outcome: function (status, json) {
+      var e = json && json.error, code = e && (e.code || e.type) || '';
+      if (/activation|limit|already|in_use|used/i.test(code)) return 'used';
+      if (status >= 400 && status < 500) return 'wrong';
+      if (status >= 500 || !status) return 'offline';
+      return null;
+    },
+    finish: function (req, lic, installId, done) {
+      var expires = lic.expiration ? String(lic.expiration).slice(0, 10) : '2999-12-31';
+      var cancelled = lic.is_cancelled === true || lic.is_cancelled === 1;
+      var status = cancelled ? 'cancelled' : expires < S.today ? 'expired' : 'ok';
+      google.script.run.withSuccessHandler(function (l) { done(status, l); }).withFailureHandler(function () { done('offline'); })
+        .recordLicence({ status: status, key: req.key, expires: expires, installId: installId });
+    },
+    activate: function (key, done) {
+      google.script.run.withSuccessHandler(function (req) {
+        if (!req.ok) return done('entity');
+        var base = req.apiBase + '/products/' + req.productId;
+        Licence.request('POST', base + '/licenses/activate.json', { uid: req.uid, license_key: req.key, title: req.title }, function (err, status, j) {
+          if (err) return done('offline');
+          var bad = Licence.outcome(status, j);
+          if (bad) return done(bad);
+          var installId = j.install_id || (j.install && j.install.id) || j.id;
+          Licence.request('GET', base + '/installs/' + installId + '/license.json?uid=' + encodeURIComponent(req.uid) + '&license_key=' + encodeURIComponent(req.key), null, function (err2, s2, lic) {
+            if (err2) return done('offline');
+            var bad2 = Licence.outcome(s2, lic);
+            if (bad2) return done(bad2);
+            Licence.finish(req, lic, String(installId), done);
+          });
+        });
+      }).withFailureHandler(function () { done('offline'); }).licenceRequest(key);
+    },
+    /** At most once a day (6.11): the server says when via licence.needsCheck. */
+    validate: function (done) {
+      google.script.run.withSuccessHandler(function (req) {
+        if (!req.ok || !req.installId) return done('entity');
+        var url = req.apiBase + '/products/' + req.productId + '/installs/' + req.installId + '/license.json?uid=' + encodeURIComponent(req.uid) + '&license_key=' + encodeURIComponent(req.key);
+        Licence.request('GET', url, null, function (err, status, lic) {
+          var bad = err ? 'offline' : Licence.outcome(status, lic);
+          if (bad) return google.script.run.withSuccessHandler(function (l) { done(bad, l); }).recordLicence({ status: bad === 'offline' ? 'offline' : 'expired' });
+          Licence.finish(req, lic, req.installId, done);
+        });
+      }).licenceRequest('');
+    }
+  };
+
+  draw();
+  call('getState', [], function (s) {
+    load(s);
+    if (s.licence && s.licence.needsCheck) Licence.validate(function () { google.script.run.withSuccessHandler(function (x) { load(x); draw(); }).getState(); });
+  });
+})();
+</script>
+</body></html>
