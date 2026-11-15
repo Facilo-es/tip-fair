@@ -30,7 +30,9 @@ const out = [
   strip(read('core.js')), strip(read('i18n.js')), strip(read('docs.js')), code, read('sheets.gs'), read('licence.gs'),
   'var HTML_FILES_ = ' + JSON.stringify(html) + ';',
   ''
-].join('\n');
+].join('\n')
+  // Pure ASCII, so copying from a page served without a charset can't garble £, € or accents.
+  .replace(/[^\x00-\x7f]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
 
 const dir = path.join(__dirname, '..', 'dist');
 fs.mkdirSync(dir, { recursive: true });

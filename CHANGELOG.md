@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 (2026-11-15)
+
+- The paste file is now plain ASCII (accents and currency signs written as escapes), so copying it from any browser view keeps £, € and accented statement text intact.
+
 ## 1.0.0 (2026-11-15)
 
 First release.

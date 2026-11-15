@@ -8,7 +8,7 @@
   "component": {
    "type": "application",
    "name": "Tip Fair",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "supplier": {
     "name": "Facilo",
     "url": [
@@ -22,7 +22,7 @@
   {
    "type": "file",
    "name": "src/Code.gs",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -33,7 +33,7 @@
   {
    "type": "file",
    "name": "src/Print.html",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -44,7 +44,7 @@
   {
    "type": "file",
    "name": "src/Sidebar.html",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -55,7 +55,7 @@
   {
    "type": "file",
    "name": "src/appsscript.json",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -66,7 +66,7 @@
   {
    "type": "file",
    "name": "src/core.js",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -77,7 +77,7 @@
   {
    "type": "file",
    "name": "src/docs.js",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -88,7 +88,7 @@
   {
    "type": "file",
    "name": "src/i18n.js",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -99,7 +99,7 @@
   {
    "type": "file",
    "name": "src/licence.gs",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -110,7 +110,7 @@
   {
    "type": "file",
    "name": "src/sheets.gs",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -121,7 +121,7 @@
   {
    "type": "file",
    "name": "src/styles.html",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -132,7 +132,7 @@
   {
    "type": "file",
    "name": "dist/appsscript.json.txt",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
@@ -143,11 +143,11 @@
   {
    "type": "file",
    "name": "dist/tip-fair.gs.txt",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "hashes": [
     {
      "alg": "SHA-256",
-     "content": "2bc9c5fed0d3298c398cac59ddcaa00d1a5e13b579936efb55636eb6606dc398"
+     "content": "7cac8bf090131315952afeaeae12c398b35c79fc9b8b017675f1eed184604960"
     }
    ]
   }
