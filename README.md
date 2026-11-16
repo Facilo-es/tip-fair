@@ -4,6 +4,7 @@
 
 Tip Fair is a Google Sheets add-on for pubs, restaurants, cafés and bars in Great Britain, Northern Ireland and Ireland. Made by [Facilo](https://facilo.es).
 
+- **Free tip split calculator:** https://tipfair.facilo.es/tip-split-calculator/
 - **Install and prices:** https://tipfair.facilo.es
 - **Install it in your sheet:** https://tipfair.facilo.es/install/
 - **Support:** support@facilo.es
